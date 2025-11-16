@@ -1,0 +1,217 @@
+// Prisma Schema for Multi-Auth System
+// Supports Auth.js v5, better-auth, and custom Lucia implementation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// AUTH.JS V5 MODELS (NextAuth)
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String? // For credentials provider
+  role          UserRole  @default(USER)
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// BETTER-AUTH SPECIFIC MODELS
+// ============================================
+
+model BetterAuthUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  password  String?
+  role      UserRole @default(USER)
+
+  // 2FA Support
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret  String?
+
+  // Email verification
+  emailVerified    Boolean  @default(false)
+  verificationToken String?
+
+  // Relations
+  betterAuthSessions BetterAuthSession[]
+  betterAuthAccounts BetterAuthAccount[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("better_auth_users")
+}
+
+model BetterAuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+
+  user BetterAuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("better_auth_sessions")
+}
+
+model BetterAuthAccount {
+  id                String @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  expiresAt         DateTime?
+
+  user BetterAuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("better_auth_accounts")
+}
+
+// ============================================
+// LUCIA AUTH MODELS (Custom Implementation)
+// ============================================
+
+model LuciaUser {
+  id       String   @id @default(cuid())
+  email    String   @unique
+  name     String?
+  password String
+  role     UserRole @default(USER)
+
+  // Relations
+  luciaSessions LuciaSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("lucia_users")
+}
+
+model LuciaSession {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+
+  user LuciaUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("lucia_sessions")
+}
+
+// ============================================
+// SHARED ENUMS
+// ============================================
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+// ============================================
+// SECURITY & AUDIT LOGS
+// ============================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model FailedLogin {
+  id        String   @id @default(cuid())
+  email     String
+  ipAddress String
+  userAgent String?
+  reason    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([ipAddress])
+  @@index([createdAt])
+  @@map("failed_logins")
+}
